@@ -1,0 +1,56 @@
+name: Flask CI/CD Pipeline
+
+# Kích hoạt khi có code push lên nhánh main
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  # --- GIAI ĐOẠN 1: TỰ ĐỘNG TEST (CI) ---
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Lấy code về máy ảo
+      uses: actions/checkout@v4
+
+    - name: Cài đặt Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Cài đặt thư viện
+      run: |
+        python -m pip install --upgrade pip
+        pip install flask
+
+    - name: Chạy thử ứng dụng (Test)
+      run: |
+        # Chạy server ở chế độ chạy ngầm (&)
+        python app.py & 
+        # Đợi 5 giây cho server khởi động
+        sleep 5
+        # Gửi request kiểm tra xem server có sống không
+        curl http://127.0.0.1:5000/
+        echo "Test thành công! Server khởi động tốt."
+
+  # --- GIAI ĐOẠN 2: DEPLOY (CD) - CHỈ CHẠY NẾU CÓ VPS ---
+  # Nếu bạn chưa có VPS, job này sẽ bị bỏ qua hoặc lỗi
+  deploy-to-vps:
+    needs: build-and-test # Chỉ chạy khi test thành công
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' # Chỉ deploy khi ở nhánh main
+    steps:
+      - name: Deploy qua SSH
+        # Chỉ chạy bước này nếu bạn đã cấu hình Secret trên GitHub
+        # Nếu chưa có, bước này sẽ lỗi, nhưng không sao
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          script: |
+            cd /var/www/flask-app
+            git pull origin main
+            pip3 install flask
+            # systemctl restart flask-app
