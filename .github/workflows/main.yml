@@ -1,56 +1,61 @@
-name: Flask CI/CD Pipeline
+name: Flask VPS Deploy (Simulation)
 
-# Kích hoạt khi có code push lên nhánh main
 on:
   push:
     branches: [ "main" ]
 
 jobs:
-  # --- GIAI ĐOẠN 1: TỰ ĐỘNG TEST (CI) ---
-  build-and-test:
+  # Job 1: Build & Test (Phần này sẽ XANH - Thành công)
+  test-code:
     runs-on: ubuntu-latest
     steps:
-    - name: Lấy code về máy ảo
-      uses: actions/checkout@v4
-
-    - name: Cài đặt Python
+    - uses: actions/checkout@v4
+    - name: Setup Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.10'
-
-    - name: Cài đặt thư viện
+    - name: Install & Test
       run: |
-        python -m pip install --upgrade pip
         pip install flask
-
-    - name: Chạy thử ứng dụng (Test)
-      run: |
-        # Chạy server ở chế độ chạy ngầm (&)
-        python app.py & 
-        # Đợi 5 giây cho server khởi động
+        python app.py &
         sleep 5
-        # Gửi request kiểm tra xem server có sống không
         curl http://127.0.0.1:5000/
-        echo "Test thành công! Server khởi động tốt."
+        echo "✅ Code chạy ngon lành ở môi trường test!"
 
-  # --- GIAI ĐOẠN 2: DEPLOY (CD) - CHỈ CHẠY NẾU CÓ VPS ---
-  # Nếu bạn chưa có VPS, job này sẽ bị bỏ qua hoặc lỗi
-  deploy-to-vps:
-    needs: build-and-test # Chỉ chạy khi test thành công
+  # Job 2: Deploy to VPS (Phần này thể hiện kỹ thuật Deploy)
+  deploy-vps:
+    needs: test-code      # Chỉ chạy khi test xong
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' # Chỉ deploy khi ở nhánh main
     steps:
-      - name: Deploy qua SSH
-        # Chỉ chạy bước này nếu bạn đã cấu hình Secret trên GitHub
-        # Nếu chưa có, bước này sẽ lỗi, nhưng không sao
+      - name: Deploy qua giao thức SSH
+        # Sử dụng action chuyên dụng để SSH vào server
         uses: appleboy/ssh-action@master
         with:
+          # Các biến bí mật đã cài đặt trong Settings
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: 22
+          # Kịch bản lệnh Linux sẽ chạy trên VPS thật
           script: |
-            cd /var/www/flask-app
+            # 1. Tạo thư mục dự án (nếu chưa có)
+            mkdir -p /var/www/my-project
+            
+            # 2. Vào thư mục
+            cd /var/www/my-project
+            
+            # 3. Lấy code mới nhất từ Git về
+            # (Giả định server đã cài git và clone lần đầu rồi)
             git pull origin main
-            pip3 install flask
-            # systemctl restart flask-app
+            
+            # 4. Cài đặt các thư viện Python mới (nếu có)
+            # Tạo môi trường ảo và cài đặt
+            python3 -m venv venv
+            source venv/bin/activate
+            pip install flask
+            
+            # 5. Khởi động lại ứng dụng để cập nhật code mới
+            # (Giả sử đang dùng Systemd để quản lý service)
+            # sudo systemctl restart my-flask-app
+            
+            echo "🚀 Deploy thành công lên VPS!"
